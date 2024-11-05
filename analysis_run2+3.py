@@ -200,8 +200,8 @@ def get_BDT_input_features(ntuple_paths: list):
     data_met = up.concatenate(ntuple_paths, branches_met, selections, aliases=aliases_met)
 
     #branches_features = ['pt_ll_NOSYS', 'mll_NOSYS', 'mjj_NOSYS', 'Et_ll_NOSYS', 'dEta_jj_NOSYS', 'dPhi_jj_NOSYS', 'dPhi_ll_NOSYS', 'dRap_jj_NOSYS', 'MT_dilep_NOSYS']
-    branches_features = ['d_y_jj', 'mll', 'd_phi_ll', 'MT', 'pt_ll', 'et_ll']
-    aliases_features = {'d_y_jj':'dRap_jj_NOSYS', 'mll':'mll_NOSYS', 'd_phi_ll':'dPhi_ll_NOSYS', 'MT':'MT_dilep_NOSYS', 'pt_ll':'pt_ll_NOSYS', 'et_ll':'Et_ll_NOSYS'}
+    branches_features = ['d_y_jj', 'mll', 'd_phi_ll', 'MT', 'pt_ll', 'et_ll', 'jet0_pt', 'jet1_pt']
+    aliases_features = {'d_y_jj':'dRap_jj_NOSYS', 'mll':'mll_NOSYS', 'd_phi_ll':'dPhi_ll_NOSYS', 'MT':'MT_dilep_NOSYS', 'pt_ll':'pt_ll_NOSYS', 'et_ll':'Et_ll_NOSYS', 'jet0_pt':'jet1_pt_NOSYS', 'jet1_pt':'jet2_pt_NOSYS'}
     data_features = up.concatenate(ntuple_paths, branches_features, selections, aliases=aliases_features, library="np")
     
     branches_weights = ['weight_mc', 'weight_pileup']
@@ -217,7 +217,7 @@ def get_BDT_input_features(ntuple_paths: list):
 
     lep0 = leps[:,0]
     lep1 = leps[:,1]
-    lep_sum = ak.sum(leps, axis=1)
+    lep_sum = lep0 + lep1
     
     jet0 = jets[:,0]
     jet1 = jets[:,1]    
@@ -245,10 +245,10 @@ def get_BDT_input_features(ntuple_paths: list):
     pt_ll = lep_sum.pt.to_numpy()
     et_ll = (lep_sum.pt * lep_sum.E/np.sqrt(lep_sum.E*lep_sum.E-lep_sum.M*lep_sum.M)).to_numpy()
 
-    sigs = np.column_stack((d_y_jj,mll,d_phi_ll,MT,pt_ll,et_ll))
+    sigs = np.column_stack((d_y_jj,mll,d_phi_ll,MT,pt_ll,et_ll,jet0_pt,jet1_pt))
     bkgs = np.column_stack(list(data_features.values()))
 
-    names = ['d_y_jj', 'mll', 'd_phi_ll', 'MT', 'pt_ll', 'et_ll']
+    names = ['d_y_jj', 'mll', 'd_phi_ll', 'MT', 'pt_ll', 'et_ll', 'jet0_pt', 'jet1_pt']
     plot_BDT_input_features(sigs,bkgs,names,names)
 
     #axis_names = ["jet 0 m (GeV)", "jet 0 pt (GeV)", "jet 1 m (GeV)", "jet 1 pt (GeV)", "#Delta y_{jj}", "m_{ll} (GeV)", "#Delta #eta_{ll}", "#Delta y_{ll}", "#Delta#phi_{ll#text{-met}}", "MT (GeV)"]
@@ -312,7 +312,7 @@ def main():
 
     #bdt_input_features_ssWW = get_BDT_input_features(ntuple_paths_ssWW)
     #bdt_input_features_WZ = get_BDT_input_features(ntuple_paths_WZ)
-    bdt_input_features_sig = get_BDT_input_features(ntuple_paths_sig[:2])
+    bdt_input_features_sig = get_BDT_input_features(ntuple_paths_sig[:1])
     
 if __name__ == "__main__":
     main()    
