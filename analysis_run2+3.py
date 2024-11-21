@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
 import vector
 import awkward as ak
 import uproot as up
@@ -10,6 +9,9 @@ from sklearn import ensemble
 from sklearn.metrics import roc_curve, auc
 
 import ROOT
+
+import pandas as pd
+import joblib
 
 def fill_histogram(data, start, stop, N_bins=80, weights=None, normalize=False, uid: int=0, title: str='hist', x_title: str=None, y_title: str=None):
     ROOT.gROOT.ForceStyle()
@@ -181,75 +183,140 @@ def BDT_pipeline():
 ################################
 ################################
 def get_BDT_input_features(ntuple_paths: list):
-    selections = 'pass_WW_baseline_NOSYS'
-    
+    # choose selections/cuts and get cutlfow
+    selections_baseline = 'pass_WW_baseline_NOSYS'
+    branches_selections = ['baseline_selection','el_selection', 'mu_selection']
+    aliases_selections = {'baseline_selection':'pass_WW_baseline_NOSYS','el_selection':'el_WW_selected_NOSYS', 'mu_selection':'mu_WW_selected_NOSYS'}
+    #aliases_selections = {'el_selection':'el_WW_baseline_NOSYS', 'mu_selection':'mu_WW_baseline_NOSYS'}
+
+    # define branches and aliases to be read
     branches_el = ['pt', 'eta', 'phi', 'E']
     aliases_el = {'n':'el_n_NOSYS', 'eta':'el_eta', 'phi':'el_phi', 'pt': 'el_pt_NOSYS', 'E': 'el_e_NOSYS'}
-    data_el = up.concatenate(ntuple_paths, branches_el, selections, aliases=aliases_el)
 
     branches_mu = ['pt', 'eta', 'phi', 'E']
     aliases_mu = {'n':'mu_n_NOSYS', 'eta':'mu_eta', 'phi':'mu_phi', 'pt': 'mu_pt_NOSYS', 'E': 'mu_e_NOSYS'}
-    data_mu = up.concatenate(ntuple_paths, branches_mu, selections, aliases=aliases_mu)
 
-    branches_jets = ['n', 'pt', 'eta', 'phi', 'E']
+    branches_jets = ['pt', 'eta', 'phi', 'E']
     aliases_jets = {'n':'jet_n_NOSYS', 'eta':'jet_eta', 'phi':'jet_phi', 'pt': 'jet_pt_NOSYS', 'E': 'jet_e_NOSYS'}
-    data_jets = up.concatenate(ntuple_paths, branches_jets, selections, aliases=aliases_jets)
 
-    branches_met = ['met', 'phi']
-    aliases_met = {'met':'met_met_NOSYS', 'phi':'met_phi_NOSYS'}
-    data_met = up.concatenate(ntuple_paths, branches_met, selections, aliases=aliases_met)
+    branches_met = ['pt', 'phi']
+    aliases_met = {'pt':'met_met_NOSYS', 'phi':'met_phi_NOSYS'}
 
     #branches_features = ['pt_ll_NOSYS', 'mll_NOSYS', 'mjj_NOSYS', 'Et_ll_NOSYS', 'dEta_jj_NOSYS', 'dPhi_jj_NOSYS', 'dPhi_ll_NOSYS', 'dRap_jj_NOSYS', 'MT_dilep_NOSYS']
-    branches_features = ['d_y_jj', 'mll', 'd_phi_ll', 'MT', 'pt_ll', 'et_ll', 'jet0_pt', 'jet1_pt']
-    aliases_features = {'d_y_jj':'dRap_jj_NOSYS', 'mll':'mll_NOSYS', 'd_phi_ll':'dPhi_ll_NOSYS', 'MT':'MT_dilep_NOSYS', 'pt_ll':'pt_ll_NOSYS', 'et_ll':'Et_ll_NOSYS', 'jet0_pt':'jet1_pt_NOSYS', 'jet1_pt':'jet2_pt_NOSYS'}
-    data_features = up.concatenate(ntuple_paths, branches_features, selections, aliases=aliases_features, library="np")
-    
+    branches_features = ['d_y_jj', 'mll', 'MT', 'jet0_pt', 'jet1_pt']
+    aliases_features = {'d_y_jj':'dRap_jj_NOSYS', 'mll':'mll_NOSYS', 'MT':'MT_dilep_NOSYS', 'jet0_pt':'jet1_pt_NOSYS', 'jet1_pt':'jet2_pt_NOSYS'}
+
+    #branches_debug = ['d_phi_ll', 'pt_ll', 'et_ll']
+    #aliases_debug = {'d_phi_ll':'dPhi_ll_NOSYS', 'pt_ll':'pt_ll_NOSYS', 'et_ll':'Et_ll_NOSYS'}
+
     branches_weights = ['weight_mc', 'weight_pileup']
-    aliases_weights = {'weight_mc':'weight_mc_NOSYS', 'weight_pileup':'weight_pileup_NOSYS'}
-    data_weights = up.concatenate(ntuple_paths, branches_weights, selections, aliases=aliases_weights)
+    aliases_weights = {'weight_mc':'weight_mc_NOSYS', 'weight_pileup':'weight_pileup_NOSYS', 'weight_jvt':'weight_jvt_effSF_NOSYS', 'weight_fjvt':'weight_fjvt_effSF_NOSYS'}
 
-    data_leps = ak.concatenate([data_el,data_mu],axis=1)
-    leps = vector.zip({'pt': data_leps.pt, 'eta': data_leps.eta, 'phi': data_leps.phi, 'E': data_leps.E})
-    jets = vector.zip({'pt': data_jets.pt, 'eta': data_jets.eta, 'phi': data_jets.phi, 'E': data_jets.E})
+    # load data for managable chunks
+    dfs = []
+    n = len(ntuple_paths)
+    print(n, ntuple_paths)
+    step = 3
+    for i in range(0,n,step):
+        print(i%step)
+        paths = ntuple_paths[i:i+step]
+        # load data
+        selections = up.concatenate(paths, branches_selections, aliases=aliases_selections)
+        data_el = up.concatenate(paths, branches_el, aliases=aliases_el)
+        data_mu = up.concatenate(paths, branches_mu, aliases=aliases_mu)
+        data_jets = up.concatenate(paths, branches_jets, selections_baseline, aliases=aliases_jets)
+        data_met = up.concatenate(paths, branches_met, selections_baseline, aliases=aliases_met, library="np")
+        data_features = up.concatenate(paths, branches_features, selections_baseline, aliases=aliases_features, library="np")
+        #data_debug = up.concatenate(paths, branches_debug, selections_baseline, aliases=aliases_debug, library="np")
+        # once final weights have been decided, can precompute while loading
+        data_weights = up.concatenate(paths, branches_weights, selections_baseline, aliases=aliases_weights, library="np")
 
-    leps = leps[ak.argsort(leps.pt, ascending=False)]    
-    jets = jets[ak.argsort(jets.pt, ascending=False)]
+        #print(ak.count(data_el.pt,axis=0))
+        #print(ak.count(data_el[selections.baseline_selection].pt,axis=0))        
+        filter_el = selections.el_selection == 1
+        filter_mu = selections.mu_selection == 1
+        filter_baseline = selections.baseline_selection == 1
+        data_filter_el = data_el[filter_el]
+        data_filter_baseline = data_el[filter_baseline]
+        data_filter_el_baseline = data_filter_el[filter_baseline]
+        #data_filter_baseline_el = data_filter_baseline[filter_el]
+        #print(ak.num(data_filter_el,axis=0))
+        #print(ak.num(data_filter_baseline,axis=0))
+        #print(ak.num(data_filter_el_baseline,axis=0))
+        #print(ak.num(data_filter_baseline_el,axis=0))
+        #print(data_new.layout)
+        #print(ak.sum(ak.count(data_new.pt,axis=1)))
+        #print(ak.sum(ak.count(data_new.pt,axis=1) > 2))
 
-    lep0 = leps[:,0]
-    lep1 = leps[:,1]
-    lep_sum = lep0 + lep1
+        # create four vectors and sort by pt
+        data_leps = ak.concatenate([data_el[filter_baseline],data_mu[filter_baseline]],axis=1)
+        print(ak.sum(ak.count(data_leps.pt,axis=1) > 2))
+        print(ak.sum(ak.count(data_leps.pt,axis=1) == 1))
+        print(ak.sum(ak.count(data_leps.pt,axis=1) < 1))
+
+        leps = vector.zip({'pt': data_leps.pt, 'eta': data_leps.eta, 'phi': data_leps.phi, 'E': data_leps.E})
+        jets = vector.zip({'pt': data_jets.pt, 'eta': data_jets.eta, 'phi': data_jets.phi, 'E': data_jets.E})
     
-    jet0 = jets[:,0]
-    jet1 = jets[:,1]    
+        leps = leps[ak.argsort(leps.pt, ascending=False)]    
+        jets = jets[ak.argsort(jets.pt, ascending=False)]
 
-    jet0_m = jet0.M.to_numpy()
-    jet0_pt = jet0.pt.to_numpy()
+        # define lep 0,1 and jet 0,1
+        lep0 = leps[:,0]
+        lep1 = leps[:,1]
+        lep_sum = lep0 + lep1
+    
+        jet0 = jets[:,0]
+        jet1 = jets[:,1]    
 
-    jet1_m = jet1.M.to_numpy()
-    jet1_pt = jet1.pt.to_numpy()
+        # compute jet mass since not pre calculated
+        jet0_m = jet0.M.to_numpy()
+        jet1_m = jet1.M.to_numpy()
 
-    d_y_jj = np.abs(jet0.rapidity - jet1.rapidity).to_numpy()
+        # compute jet pt and dy for comparison
+        jet0_pt = jet0.pt.to_numpy()
+        jet1_pt = jet1.pt.to_numpy()
+        d_y_jj = np.abs(jet0.rapidity - jet1.rapidity).to_numpy()
 
-    mll = lep_sum.M.to_numpy()
-    d_eta_ll = np.abs(lep0.deltaeta(lep1)).to_numpy()
-    d_y_ll = np.abs(lep0.rapidity-lep1.rapidity).to_numpy()
+        # compute non-precomputed lepton input features
+        d_eta_ll = np.abs(lep0.deltaeta(lep1)).to_numpy()
+        d_y_ll = np.abs(lep0.rapidity-lep1.rapidity).to_numpy()
+        d_phi_ll_met = np.abs(lep_sum.phi-data_met['phi']).to_numpy()
 
-    d_phi_ll = lep0.deltaphi(lep1).to_numpy()
-    d_phi_ll_met = np.abs(lep_sum.phi-data_met.phi).to_numpy()
+        # compute remaining lepton input features for comparison
+        mll = lep_sum.M.to_numpy()
+        d_phi_ll = lep1.deltaphi(lep0).to_numpy()
+        pt_ll = lep_sum.pt.to_numpy()
 
-    leps_transverse = vector.zip({'pt': lep_sum.pt, 'phi': lep_sum.phi})
-    met = vector.zip({'pt': data_met.met, 'phi': data_met.phi})
-    a = met.pt + lep_sum.pt*lep_sum.E/np.sqrt(lep_sum.E*lep_sum.E-lep_sum.M*lep_sum.M)
-    b = met + leps_transverse
-    MT = np.sqrt(a*a-b.dot(b)).to_numpy()
-    pt_ll = lep_sum.pt.to_numpy()
-    et_ll = (lep_sum.pt * lep_sum.E/np.sqrt(lep_sum.E*lep_sum.E-lep_sum.M*lep_sum.M)).to_numpy()
+        leps_transverse = vector.zip({'pt': lep_sum.pt, 'phi': lep_sum.phi})
+        met = vector.array(data_met)
+        et_ll = np.sqrt(lep_sum.pt*lep_sum.pt+lep_sum.M*lep_sum.M)
+        a = met.pt + et_ll#data_debug['et_ll']
+        b = met + leps_transverse
+        MT = np.sqrt(a*a-b.dot(b)).to_numpy()
 
-    sigs = np.column_stack((d_y_jj,mll,d_phi_ll,MT,pt_ll,et_ll,jet0_pt,jet1_pt))
-    bkgs = np.column_stack(list(data_features.values()))
+        data_features['jet0_m'] = jet0_m
+        data_features['jet1_m'] = jet1_m    
+        data_features['d_phi_ll_met'] = d_phi_ll_met
+        data_features['d_eta_ll'] = d_eta_ll
+        data_features['d_y_ll'] = d_y_ll
+        data_features['weight'] = data_weights['weight_mc']*data_weights['weight_pileup']
+        # rename features for mc16 compatibility
+        data_features['DYjj'] = data_features.pop('d_y_jj')
+        data_features['Mll'] = data_features.pop('mll')
+        data_features['DPhillMET'] = data_features.pop('d_phi_ll_met')
+        data_features['DEtall'] = data_features.pop('d_eta_ll')
+        data_features['DYll'] = data_features.pop('d_y_ll')
+        data_features['mll'] = mll
+        data_features['Dmll'] = data_features['Mll'] - data_features['mll']
+        df = pd.DataFrame(data_features)
+        dfs.append(df)
+    df = pd.concat(dfs, ignore_index=True)
 
-    names = ['d_y_jj', 'mll', 'd_phi_ll', 'MT', 'pt_ll', 'et_ll', 'jet0_pt', 'jet1_pt']
-    plot_BDT_input_features(sigs,bkgs,names,names)
+    #sigs = np.column_stack((d_y_jj,mll,d_phi_ll,MT,pt_ll,et_ll.to_numpy(),jet0_pt,jet1_pt))
+    #bkgs = np.column_stack(list(data_features.values()))
+
+    #names = ['d_y_jj', 'mll', 'd_phi_ll', 'MT', 'pt_ll', 'et_ll', 'jet0_pt', 'jet1_pt']
+    #plot_BDT_input_features(sigs,bkgs,names,names)
 
     #axis_names = ["jet 0 m (GeV)", "jet 0 pt (GeV)", "jet 1 m (GeV)", "jet 1 pt (GeV)", "#Delta y_{jj}", "m_{ll} (GeV)", "#Delta #eta_{ll}", "#Delta y_{ll}", "#Delta#phi_{ll#text{-met}}", "MT (GeV)"]
     #feature_names = ['jet0_m','jet0_pt','jet1_m','jet1_pt','d_y_jj','mll','d_eta_ll','d_y_ll','d_phi_ll_met','MT']
@@ -262,9 +329,12 @@ def get_BDT_input_features(ntuple_paths: list):
     #print(data_features['mll'].shape)
     #plot_BDT_input_features(BDT_input_features,backgrounds,feature_names,axis_names)
 
-    return
+    return df
 
 def get_ntuple_paths(ntuple_list_files: list, DSIDs: list):
+    if type(DSIDs) is not list:
+        assert(type(DSIDs) is str)
+        DSIDs = [DSIDs]
     data_paths = []
     for file in ntuple_list_files:
         with open(file) as f:
@@ -284,35 +354,49 @@ def print_ttree_branches(ttree: str):
     with up.open(ttree) as f:
         print(f.classnames())
         tree = f[f.keys()[-1]]
-        for key in sorted(tree.keys(),reverse=False):
-            print(key)
-
-def create_reduced_ttree(ttree: str):
-    with up.open(ttree) as f:
-        print(f.classnames())
-        tree = f[f.keys()[-1]]
+        keys = []
         for key in sorted(tree.keys(),reverse=False):
             if "NOSYS" in key:
                 print(key)
-
+                if "el_" in key:
+                    keys.append(key)
+                elif "mu_" in key:
+                    keys.append(key)
+        return keys
+    
 def main():
     # everything depends on data set: mc16, mc20, mc23
     path = "/eos/atlas/atlascerngroupdisk/phys-hmbs/mbl/ssWWWZ_run3/ntuple_v02/"
     ntuple_mc20_lists = [path + "filelist_mc20a.txt", path + "filelist_mc20d.txt", path + "filelist_mc20e.txt"]
     
-    #DSIDs_mc20_ssWW = ["700590", "700603", "700594"]
-    #DSIDs_mc20_WZ = ["700588", "700601", "700592"]
+    DSIDs_mc20_ssWW = ["700590", "700603", "700594"]
+    DSIDs_mc20_WZ = ["700588", "700601", "700592"]
     DSIDs_mc20_sig = ["525925", "525940", "525945"]
-    
-    #ntuple_paths_ssWW = get_ntuple_paths(ntuple_mc20_lists,DSIDs_mc20_ssWW)
-    #ntuple_paths_WZ = get_ntuple_paths(ntuple_mc20_lists,DSIDs_mc20_WZ)
-    ntuple_paths_sig = get_ntuple_paths(ntuple_mc20_lists,DSIDs_mc20_sig)
-    #print(ntuple_paths_sig)
-    #create_reduced_ttree(ntuple_paths_sig[0])
 
-    #bdt_input_features_ssWW = get_BDT_input_features(ntuple_paths_ssWW)
-    #bdt_input_features_WZ = get_BDT_input_features(ntuple_paths_WZ)
-    bdt_input_features_sig = get_BDT_input_features(ntuple_paths_sig[:1])
+    # bgks
+    DSIDs = DSIDs_mc20_ssWW + DSIDs_mc20_WZ
+    # sigs
+    #DSIDs = DSIDs_mc20_sig[:1]
+
+    for id in DSIDs:
+        #ntuple_paths_ssWW = get_ntuple_paths(ntuple_mc20_lists,DSIDs_mc20_ssWW)
+        #ntuple_paths_WZ = get_ntuple_paths(ntuple_mc20_lists,DSIDs_mc20_WZ)
+        #ntuple_paths_sig = get_ntuple_paths(ntuple_mc20_lists,DSIDs_mc20_sig[0])
+        ntuple_paths = get_ntuple_paths(ntuple_mc20_lists,id)
+        #print(ntuple_paths_sig)
+        #keys = print_ttree_branches(ntuple_paths_sig[0])
+        #keys.append("el_eta")
+        #keys.append("el_phi")
+        #keys.append("mu_eta")
+        #keys.append("mu_phi")
+        #with up.open(ntuple_paths_sig[0]+":defaultTree") as f:
+        #    data_df = f.arrays(keys,library="pd")
+        #data_df.transpose().to_csv("data_short.txt", sep='\t')
+        #bdt_input_features_ssWW = get_BDT_input_features(ntuple_paths_ssWW)
+        #bdt_input_features_WZ = get_BDT_input_features(ntuple_paths_WZ)
+        bdt_input_features = get_BDT_input_features(ntuple_paths[:1])
+        #bdt_input_features_sig.transpose().to_csv("data_comp.txt", sep='\t')
+        joblib.dump(bdt_input_features, 'joblib/'+id+'_bkg_merged_SR.gz',compress=("gzip", 3))
     
 if __name__ == "__main__":
     main()    
