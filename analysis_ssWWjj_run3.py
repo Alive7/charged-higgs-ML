@@ -25,6 +25,8 @@ def fill_histogram(data, start, stop, N_bins=80, weights=None, normalize=False, 
         h.GetYaxis().SetTitle(y_title)
     if weights is None:
         weights = np.ones(data_to_fill.size)
+    else:
+        weights = weights.copy().astype('float64')
     h.FillN(data_to_fill.size,data_to_fill,weights)
     #h.SetLineColor(uid+2)
     #h.Sumw2()
@@ -60,7 +62,7 @@ def plot_histograms(historgrams, title: str, extension: str=".pdf", add_ylable: 
     #tex.DrawLatex(0.2+0.02,0.85, "DiJet Samples")
     c.Print("plots/"+title+extension)
 
-def plot_BDT_input_features(features_data, features_background, feature_names, axis_names, signal_weights = None, background_weights = None):
+def plot_BDT_input_features_np(features_data, features_background, feature_names, axis_names, signal_weights = None, background_weights = None):
     mins_feature = np.amin(features_data, axis=0)
     maxs_feature = np.amax(features_data, axis=0)
     
@@ -74,17 +76,44 @@ def plot_BDT_input_features(features_data, features_background, feature_names, a
     #    mins_plot[0] = 0
     #if mins_plot[1] > 0:
     #    mins_plot[1] = 0
-    #if maxs_plot[0] > 350:
-    #    maxs_plot[0] = 350
-    #if maxs_plot[1] > 350:
-    #    maxs_plot[1] = 350
-    #if maxs_plot[3] > 180:
-    #    maxs_plot[3] = 180
+    if maxs_plot[1] > 180:
+        maxs_plot[1] = 180
+    if maxs_plot[2] > 400:
+        maxs_plot[2] = 400
+    if maxs_plot[3] > 350:
+        maxs_plot[3] = 350
+    if maxs_plot[4] > 350:
+        maxs_plot[4] = 350
+    if maxs_plot[5] > 50:
+        maxs_plot[5] = 50
+    if maxs_plot[6] > 50:
+        maxs_plot[6] = 50
+    if maxs_plot[7] > 3.5:
+        maxs_plot[7] = 3.5
+    if maxs_plot[8] > 3:
+        maxs_plot[8] = 3
+    if maxs_plot[9] > 3:
+        maxs_plot[9] = 3
 
     for i,name in enumerate(axis_names):
         h_data = fill_histogram(features_data[:,i], mins_plot[i], maxs_plot[i], weights = signal_weights, normalize=True, uid=i+1, title="GM H++: 200GeV", x_title=name)
         h_background = fill_histogram(features_background[:,i], mins_plot[i], maxs_plot[i], weights = background_weights, normalize=True, uid=(i+1)*10, title="background")
         plot_histograms([h_data,h_background], feature_names[i], extension = ".png")
+
+def plot_BDT_input_features_pd(df_sig, df_bkg):
+    names = list(df_sig.columns)
+    axes = list(df_sig.columns)
+    weight_sig = df_sig['weight'].to_numpy()
+    weight_bkg = df_bkg['weight'].to_numpy()
+    features_sig = df_sig.to_numpy()
+    features_bkg = df_bkg.to_numpy()
+    for i in range(1,7):
+        axes[i] = axes[i] + " (GeV)"
+        features_sig[:,i] /= 1000
+        features_bkg[:,i] /= 1000
+    print(names)
+
+    plot_BDT_input_features_np(features_sig,features_bkg,names,axes,weight_sig,weight_bkg)
 
 def BDT_pipeline():
     files_data, files_background = get_data_paths()
@@ -182,128 +211,6 @@ def BDT_pipeline():
 ################################
 ################################
 ################################
-def get_BDT_input_features_old(ntuple_paths: list):
-    assert(type(ntuple_paths) is list)
-    # only use WW baseline (for now)
-    print("WARNING: Only WW baseline selctions are used. Additional selections must be applied to select appropriate jets, leptons, and signal regions.")
-    selections_baseline = 'pass_WW_baseline_NOSYS'
-    #branches_selections = ['baseline_selection','el_selection', 'mu_selection']
-    #aliases_selections = {'baseline_selection':'pass_WW_baseline_NOSYS','el_selection':'el_WW_selected_NOSYS', 'mu_selection':'mu_WW_selected_NOSYS'}
-    #aliases_selections = {'el_selection':'el_WW_baseline_NOSYS', 'mu_selection':'mu_WW_baseline_NOSYS'}
-
-    # define branches and aliases to be read
-    # need el, mu, jets, met, and weights
-    branches_el = ['pt', 'eta', 'phi', 'E']
-    aliases_el = {'n':'el_n_NOSYS', 'eta':'el_eta', 'phi':'el_phi', 'pt': 'el_pt_NOSYS', 'E': 'el_e_NOSYS'}
-
-    branches_mu = ['pt', 'eta', 'phi', 'E']
-    aliases_mu = {'n':'mu_n_NOSYS', 'eta':'mu_eta', 'phi':'mu_phi', 'pt': 'mu_pt_NOSYS', 'E': 'mu_e_NOSYS'}
-
-    branches_jets = ['pt', 'eta', 'phi', 'E']
-    aliases_jets = {'n':'jet_n_NOSYS', 'eta':'jet_eta', 'phi':'jet_phi', 'pt': 'jet_pt_NOSYS', 'E': 'jet_e_NOSYS'}
-
-    branches_met = ['pt', 'phi']
-    aliases_met = {'pt':'met_met_NOSYS', 'phi':'met_phi_NOSYS'}
-
-    branches_weights = ['weight_mc', 'weight_pileup']
-    aliases_weights = {'weight_mc':'weight_mc_NOSYS', 'weight_pileup':'weight_pileup_NOSYS', 'weight_jvt':'weight_jvt_effSF_NOSYS', 'weight_fjvt':'weight_fjvt_effSF_NOSYS'}
-
-    # some input features are precomputed
-    #all_precomputed_branches = ['pt_ll_NOSYS', 'mll_NOSYS', 'mjj_NOSYS', 'Et_ll_NOSYS', 'dEta_jj_NOSYS', 'dPhi_jj_NOSYS', 'dPhi_ll_NOSYS', 'dRap_jj_NOSYS', 'MT_dilep_NOSYS']
-    branches_features = ['d_y_jj', 'mll', 'MT', 'jet0_pt', 'jet1_pt']
-    aliases_features = {'d_y_jj':'dRap_jj_NOSYS', 'mll':'mll_NOSYS', 'MT':'MT_dilep_NOSYS', 'jet0_pt':'jet1_pt_NOSYS', 'jet1_pt':'jet2_pt_NOSYS'}
-
-    #branches_debug = ['d_phi_ll', 'pt_ll', 'et_ll']
-    #aliases_debug = {'d_phi_ll':'dPhi_ll_NOSYS', 'pt_ll':'pt_ll_NOSYS', 'et_ll':'Et_ll_NOSYS'}
-
-    # load data for managable chunks
-    dfs = []
-    n = len(ntuple_paths)
-    print("Num ntuples: "+str(n))
-    # number of ntuples considered in each loop can probably be chosen more intelligently
-    step = 3
-    print("\tLoop:",end=' ')
-    # rewrite using iterate instead of concatenate? Parallelize?
-    for i in range(0,n,step):
-        print(i/step, end=' ')
-        paths = ntuple_paths[i:i+step]
-        # load data
-        #selections = up.concatenate(paths, branches_selections, aliases=aliases_selections)
-        data_el = up.concatenate(paths, branches_el, selections_baseline, aliases=aliases_el)
-        data_mu = up.concatenate(paths, branches_mu, selections_baseline, aliases=aliases_mu)
-        data_jets = up.concatenate(paths, branches_jets, selections_baseline, aliases=aliases_jets)
-        data_met = up.concatenate(paths, branches_met, selections_baseline, aliases=aliases_met, library="np")
-        data_features = up.concatenate(paths, branches_features, selections_baseline, aliases=aliases_features, library="np")
-        #data_debug = up.concatenate(paths, branches_debug, selections_baseline, aliases=aliases_debug, library="np")
-        # weights could be combined while being read, not guarenteed to be more efficent and harder to modify
-        data_weights = up.concatenate(paths, branches_weights, selections_baseline, aliases=aliases_weights, library="np")
-
-        # create four vectors and sort by pt
-        data_leps = ak.concatenate([data_el,data_mu],axis=1)
-        print(ak.sum(ak.count(data_leps.pt,axis=1) > 2), end=' ')
-        print(ak.sum(ak.count(data_leps.pt,axis=1) == 1), end=' ')
-        print(ak.sum(ak.count(data_leps.pt,axis=1) < 1), end=' ')
-
-        leps = vector.zip({'pt': data_leps.pt, 'eta': data_leps.eta, 'phi': data_leps.phi, 'E': data_leps.E})
-        jets = vector.zip({'pt': data_jets.pt, 'eta': data_jets.eta, 'phi': data_jets.phi, 'E': data_jets.E})
-    
-        leps = leps[ak.argsort(leps.pt, ascending=False)]    
-        jets = jets[ak.argsort(jets.pt, ascending=False)]
-
-        # define lep 0,1 and jet 0,1
-        lep0 = leps[:,0]
-        lep1 = leps[:,1]
-        lep_sum = lep0 + lep1
-    
-        jet0 = jets[:,0]
-        jet1 = jets[:,1]    
-
-        # compute jet mass since not pre calculated
-        jet0_m = jet0.M.to_numpy()
-        jet1_m = jet1.M.to_numpy()
-
-        # compute jet pt and dy for comparison
-        #jet0_pt = jet0.pt.to_numpy()
-        #jet1_pt = jet1.pt.to_numpy()
-        #d_y_jj = np.abs(jet0.rapidity - jet1.rapidity).to_numpy()
-
-        # compute non-precomputed lepton input features
-        d_eta_ll = np.abs(lep0.deltaeta(lep1)).to_numpy()
-        d_y_ll = np.abs(lep0.rapidity-lep1.rapidity).to_numpy()
-        d_phi_ll_met = np.abs(lep_sum.phi-data_met['phi']).to_numpy()
-
-        # compute remaining lepton input features for comparison
-        #mll = lep_sum.M.to_numpy()
-        #d_phi_ll = lep1.deltaphi(lep0).to_numpy()
-        #pt_ll = lep_sum.pt.to_numpy()
-
-        #leps_transverse = vector.zip({'pt': lep_sum.pt, 'phi': lep_sum.phi})
-        #met = vector.array(data_met)
-        #et_ll = np.sqrt(lep_sum.pt*lep_sum.pt+lep_sum.M*lep_sum.M)
-        #a = met.pt + et_ll#data_debug['et_ll']
-        #b = met + leps_transverse
-        #MT = np.sqrt(a*a-b.dot(b)).to_numpy()
-
-        # add features not precomputed to feature dictionary
-        data_features['jet0_m'] = jet0_m
-        data_features['jet1_m'] = jet1_m    
-        data_features['d_phi_ll_met'] = d_phi_ll_met
-        data_features['d_eta_ll'] = d_eta_ll
-        data_features['d_y_ll'] = d_y_ll
-        data_features['weight'] = data_weights['weight_mc']*data_weights['weight_pileup']
-        print("WARNING: reco weights are probably not computed correctly. See https://twiki.cern.ch/twiki/bin/viewauth/AtlasProtected/PMGCrossSectionTool")
-        # rename features for mc16 compatibility, recomend not using mc16 naming convention for run 3
-        data_features['DYjj'] = data_features.pop('d_y_jj')
-        data_features['Mll'] = data_features.pop('mll')
-        data_features['DPhillMET'] = data_features.pop('d_phi_ll_met')
-        data_features['DEtall'] = data_features.pop('d_eta_ll')
-        data_features['DYll'] = data_features.pop('d_y_ll')
-        # convert to pd dataframe so simplify recombination
-        df = pd.DataFrame(data_features)
-        dfs.append(df)
-    df = pd.concat(dfs, ignore_index=True)
-    return df
-
 def get_dict(array_ak, branches: list, keys: list, to_numpy: bool=False):
     assert(type(branches) is list)
     assert(type(keys) is list)
@@ -400,6 +307,20 @@ def get_BDT_input_features(ntuple_paths: list):
     df = pd.concat(dfs, ignore_index=True)
     return df
 
+def print_ntuple_branches(file: str):
+    with up.open(file) as f:
+        print(f.classnames())
+        tree = f[f.keys()[-1]]
+        keys = []
+        for key in sorted(tree.keys(),reverse=False):
+            if "NOSYS" in key:
+                print(key)
+                if "el_" in key:
+                    keys.append(key)
+                elif "mu_" in key:
+                    keys.append(key)
+    return keys
+
 def get_ntuple_paths(ntuple_files: list, DSIDs: list):
     if type(DSIDs) is not list:
         assert(type(DSIDs) is str)
@@ -421,20 +342,6 @@ def get_ntuple_paths(ntuple_files: list, DSIDs: list):
                 search_start = line_end + 1
     return data_paths
 
-def print_ntuple_branches(file: str):
-    with up.open(file) as f:
-        print(f.classnames())
-        tree = f[f.keys()[-1]]
-        keys = []
-        for key in sorted(tree.keys(),reverse=False):
-            if "NOSYS" in key:
-                print(key)
-                if "el_" in key:
-                    keys.append(key)
-                elif "mu_" in key:
-                    keys.append(key)
-    return keys
-
 def process_ntuples(DSIDs: list, files: list, sig: bool=False):
     assert(type(DSIDs) is list)
     assert(type(files) is list)
@@ -454,22 +361,44 @@ def process_ntuples(DSIDs: list, files: list, sig: bool=False):
         # make dumps of processed ntuples to simplify further analyses
         with up.recreate('processed_ntuples/'+fname+'.root') as f:
             f['defaultTree;1'] = bdt_inputs_df
-    
+    return
+
+def load_dfs(DSIDs: list, sig: bool):
+    if type(DSIDs) is not list:
+        assert(type(DSIDs) is str)
+        DSIDs = [DSIDs]
+    dfs = []
+    for id in DSIDs:
+        if sig:
+            fname = id+'_sig_merged_SR.gz'
+        else:
+            fname = id+'_bkg_merged_SR.gz'
+        df = joblib.load("joblib/"+fname)
+        dfs.append(df)
+    df = pd.concat(dfs, ignore_index=True)
+    return df 
+        
 def main():
     # absolute path to files containing the ntuples for mc20 and mc23
     path = "/eos/atlas/atlascerngroupdisk/phys-hmbs/mbl/ssWWWZ_run3/ntuple_v02/"
     # absolute paths to the lists of ntuples for a given run
-    files = [path + "filelist_mc20a.txt", path + "filelist_mc20d.txt", path + "filelist_mc20e.txt"]
+    files = ["filelist_mc20a.txt", "filelist_mc20d.txt", "filelist_mc20e.txt"]
+    paths = [path + file for file in files]
     # desired sig/bkg DSIDs
     DSIDs_ssWW = ["700590", "700603", "700594"]
     DSIDs_WZ = ["700588", "700601", "700592"]
     DSIDs_sig_450 = ["525935"]
+    DSIDs_sig_200 = ["525925"]
     # combine bkgs
     DSIDs_bkgs = DSIDs_ssWW + DSIDs_WZ
-    DSIDs_sigs = DSIDs_sig_450
+    DSIDs_sigs = DSIDs_sig_200
     # process selected signal and backgrounds
-    process_ntuples(DSIDs_bkgs, files, False)
-    process_ntuples(DSIDs_sigs, files, True)
-        
+    #process_ntuples(DSIDs_bkgs, paths, False)
+    #process_ntuples(DSIDs_sigs, paths, True)
+
+    df_sig = load_dfs(DSIDs_sigs, True)
+    df_bkg = load_dfs(DSIDs_bkgs, False)
+    plot_BDT_input_features_pd(df_sig,df_bkg)
+    
 if __name__ == "__main__":
     main()    
