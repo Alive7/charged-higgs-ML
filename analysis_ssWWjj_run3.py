@@ -357,7 +357,7 @@ def process_ntuples(DSIDs: list, files: list, sig: bool=False):
             fname = id+'_bkg_merged_SR'
         # save dataframes as joblib dumps for compatibility with mc16 analysis
         # this should be scrapped in run 3
-        joblib.dump(bdt_inputs_df, 'joblib/'+fname+'.gz',compress=("gzip", 3))
+        joblib.dump(bdt_inputs_df, 'compressed_dataframes/'+fname+'.gz',compress=("gzip", 3))
         # make dumps of processed ntuples to simplify further analyses
         with up.recreate('processed_ntuples/'+fname+'.root') as f:
             f['defaultTree;1'] = bdt_inputs_df
@@ -373,7 +373,7 @@ def load_dfs(DSIDs: list, sig: bool):
             fname = id+'_sig_merged_SR.gz'
         else:
             fname = id+'_bkg_merged_SR.gz'
-        df = joblib.load("joblib/"+fname)
+        df = joblib.load("compressed_dataframes/"+fname)
         dfs.append(df)
     df = pd.concat(dfs, ignore_index=True)
     return df 
