@@ -14,9 +14,9 @@ This packge contains two conceptually different familes of functions. Those pert
 
 Once `main()` is configured, run from terminal by simply calling with python: `python3 analysis_ssWWjj_run3.py`, or run in a notebook enviornment by creating a notebook in the same directory and importing this modual with `import analysis_ssWWjj_run3`
 
-### More details on editing 'main()'
+### More details on editing `main()`
 
-To configure for a given dataset, the 'main()' function must be edited or reproduced in a notebook enviornment. 'path' specifies the absolute path on lxplus eos to the lists of ntuples for a given run. 'files' identifies the ntuple lists to be considered. DSIDs for the desiered processes must be specified. The can be lumped into a single lists or kept separate if the distiction between singal/brackground or different backgrounds is relevant for your analysis.
+To configure for a given dataset, the `main()` function must be edited or reproduced in a notebook enviornment. `path` specifies the absolute path on lxplus eos to the lists of ntuples for a given run. `files` identifies the ntuple lists to be considered. DSIDs for the desiered processes must be specified. The can be lumped into a single lists or kept separate if the distiction between singal/brackground or different backgrounds is relevant for your analysis.
 
 Different datasets can be combined by listing the desired DSIDs as long as the associated ntuple lists are specified. For example, a combined MC20 and MC23 analysis may be undertaken by including the appropriate files and paths and listing the DSIDs for a given charged Higgs mass for each run.
 
