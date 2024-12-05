@@ -225,6 +225,7 @@ def get_BDT_input_features(ntuple_paths: list):
     assert(type(ntuple_paths) is list)
     # only use WW baseline (for now)
     # look into event_selection_NOSYS. Get inspired by https://gitlab.cern.ch/adscott/sr-optimization/-/tree/master?ref_type=heads
+    # further explanations are found at https://gitlab.cern.ch/atlas-physics/hmbs/mbl/ana-hdbs-2022-12/vbstools/-/blob/v03.1/VBSTools/CustomVariables.h?ref_type=tags#L43
     print("WARNING: Only WW baseline selctions are used. Additional selections must be applied to select appropriate jets, leptons, and signal regions.")
     s_baseline = 'pass_WW_baseline_NOSYS'
 
